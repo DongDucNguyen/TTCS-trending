@@ -36,16 +36,11 @@ pip install -r requirements.txt
    - BotFather sẽ cấp cho bạn một chuỗi Token dài (ví dụ: `123456:ABC-DEF1234ghIkl-zyx57W2v1u123ew11`). Đây chính là `TELEGRAM_BOT_TOKEN`.
 
 2. **Lấy Chat ID cá nhân**:
-   **Cách 1: Dùng Bot có sẵn (Dành cho người mới)**
-   - Lên thanh tìm kiếm của Telegram, gõ tìm **@RawDataBot** hoặc **@userinfobot**.
-   - Bấm `Start` (hoặc gửi một tin nhắn). Nó sẽ trả về cho bạn một đoạn văn bản. Tìm dãy số ở dòng `id` hoặc `chat id` (ví dụ: `7738904186`).
-
-   **Cách 2: Tự lấy qua API (Dành cho Developer)**
    - Mở ứng dụng Telegram, tìm con Bot bạn vừa tạo ở Bước 1 và nhắn cho nó một dòng chữ bất kỳ (ví dụ: `hello`).
-   - Mở trình duyệt web và dán đường link sau (thay `<TOKEN>` bằng Token của bạn):
+   - Mở trình duyệt web và dán đường link sau (nhớ thay `<TOKEN>` bằng Token của bạn):
      `https://api.telegram.org/bot<TOKEN>/getUpdates`
-   - Trong đống chữ loằng ngoằng hiện ra, tìm đoạn `"chat":{"id": ` -> Dãy số ngay phía sau chính là Chat ID của bạn.
-
+   - Trình duyệt sẽ trả về một đoạn mã. Hãy tìm đến đoạn có chứa `"chat":{"id": ` -> Dãy số ngay phía sau chữ `id` chính là Chat ID của bạn (ví dụ: `7738904186`).
+   
    *Copy dãy số Chat ID đó để dùng cho bước tiếp theo.*
 
 ### Bước 3: Thiết lập môi trường
