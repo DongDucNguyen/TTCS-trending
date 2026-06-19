@@ -3,52 +3,6 @@ import { Activity, Network, FileText, TrendingUp, ChevronDown, ChevronUp, ZoomIn
 import ForceGraph2D from 'react-force-graph-2d';
 import './index.css';
 
-// Mock Data từ Backend
-const mockData = {
-  leaderboard: [
-    { 
-      topic: "Large Language Models", paper_count: 4, growth_rate: 10.35,
-      papers: ["A new LLM outperforms GPT-4", "Autonomous Multi-Agent System", "LLM Hallucinations solution", "Prompt Engineering Techniques"]
-    },
-    { 
-      topic: "Reinforcement Learning", paper_count: 3, growth_rate: 10.31,
-      papers: ["RL in Robotics", "PPO Agent continuous control", "Q-Learning analysis"]
-    },
-    { 
-      topic: "Agentic AI", paper_count: 3, growth_rate: 11.1,
-      papers: ["Agentic Workflow with LLMs", "Autonomous Agents for Web", "Language Agents survey"]
-    },
-    { 
-      topic: "Computer Vision", paper_count: 1, growth_rate: 11.73,
-      papers: ["Vision Transformer architecture"]
-    }
-  ],
-  graph: {
-    // Dữ liệu mô phỏng từ khóa từ c-TF-IDF
-    nodes: [
-      { id: "LLM", name: "LLM", size: 32, group: 1 },
-      { id: "Reasoning", name: "Reasoning", size: 24, group: 1 },
-      { id: "Transformers", name: "Transformers", size: 18, group: 1 },
-      { id: "Agentic", name: "Agentic", size: 28, group: 2 },
-      { id: "Autonomy", name: "Autonomy", size: 20, group: 2 },
-      { id: "RLHF", name: "RLHF", size: 30, group: 3 },
-      { id: "PPO", name: "PPO", size: 22, group: 3 },
-      { id: "Vision", name: "Vision", size: 20, group: 4 },
-      { id: "Segmentation", name: "Segmentation", size: 14, group: 4 },
-    ],
-    edges: [
-      { source: "LLM", target: "Reasoning", weight: 0.8 },
-      { source: "LLM", target: "Transformers", weight: 0.6 },
-      { source: "LLM", target: "Agentic", weight: 0.4 },
-      { source: "Agentic", target: "Autonomy", weight: 0.7 },
-      { source: "RLHF", target: "PPO", weight: 0.9 },
-      { source: "LLM", target: "RLHF", weight: 0.5 },
-      { source: "Vision", target: "Segmentation", weight: 0.8 },
-      { source: "Transformers", target: "Vision", weight: 0.3 }
-    ]
-  }
-};
-
 function App() {
   const graphRef = useRef(null);
   const [expandedTopic, setExpandedTopic] = useState(null);
@@ -57,12 +11,27 @@ function App() {
   const [isFullscreen, setIsFullscreen] = useState(false);
   const containerRef = useRef(null);
   const [dimensions, setDimensions] = useState({ width: 700, height: 500 });
+  const [apiData, setApiData] = useState({ leaderboard: [], graph: { nodes: [], edges: [] } });
+  const [isLoading, setIsLoading] = useState(true);
+
+  useEffect(() => {
+    fetch('http://localhost:8000/api/pipeline/run')
+      .then(res => res.json())
+      .then(data => {
+        setApiData(data);
+        setIsLoading(false);
+      })
+      .catch(err => {
+        console.error("Failed to fetch API:", err);
+        setIsLoading(false);
+      });
+  }, []);
 
   // Precompute cross-links for hover effect
   const forceGraphData = useMemo(() => {
     const data = {
-      nodes: mockData.graph.nodes.map(n => ({ ...n })),
-      links: mockData.graph.edges.map(e => ({ ...e }))
+      nodes: apiData.graph.nodes.map(n => ({ ...n })),
+      links: apiData.graph.edges.map(e => ({ ...e }))
     };
     data.links.forEach(link => {
       const a = data.nodes.find(n => n.id === link.source);
@@ -75,7 +44,7 @@ function App() {
       }
     });
     return data;
-  }, []);
+  }, [apiData]);
 
   useEffect(() => {
     if (!containerRef.current) return;
@@ -112,7 +81,16 @@ function App() {
 
   const handleZoomIn = () => graphRef.current.zoom(graphRef.current.zoom() * 1.5, 400);
   const handleZoomOut = () => graphRef.current.zoom(graphRef.current.zoom() / 1.5, 400);
-  const handleFit = () => graphRef.current.zoomToFit(400, 50);
+  const handleFit = () => graphRef.current && graphRef.current.zoomToFit(400, 50);
+
+  if (isLoading) {
+    return (
+      <div className="app-container" style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', height: '100vh', flexDirection: 'column', gap: '1rem' }}>
+        <Activity className="animate-spin" size={48} color="#10b981" />
+        <h2 style={{ color: '#e6edf3' }}>Loading AI Pipeline...</h2>
+      </div>
+    );
+  }
 
   if (selectedKeyword) {
     return (
@@ -178,7 +156,7 @@ function App() {
           </div>
           
           <div className="leaderboard-list">
-            {mockData.leaderboard.map((item, idx) => (
+            {apiData.leaderboard.map((item, idx) => (
               <div 
                 key={idx} 
                 className={`leaderboard-item ${expandedTopic === item.topic ? 'expanded' : ''}`}
@@ -202,7 +180,7 @@ function App() {
                   </div>
                 </div>
                 
-                {expandedTopic === item.topic && (
+                {expandedTopic === item.topic && item.papers && (
                   <div className="paper-list" style={{ marginTop: '1rem', borderTop: '1px solid var(--border-glass)', paddingTop: '1rem' }}>
                     {item.papers.map((paper, pIdx) => (
                       <div key={pIdx} className="paper-item" style={{ fontSize: '0.9rem', color: 'var(--text-primary)', marginBottom: '0.5rem', padding: '0.5rem', background: 'rgba(255,255,255,0.03)', borderRadius: '6px' }}>
@@ -238,7 +216,7 @@ function App() {
                   {isFullscreen ? <Minimize size={20} /> : <Maximize size={20} />}
                 </button>
               </div>
-              {mockData.graph.nodes.length > 0 ? (
+              {apiData.graph.nodes.length > 0 ? (
                 <ForceGraph2D
                   ref={graphRef}
                   graphData={forceGraphData}

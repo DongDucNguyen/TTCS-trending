@@ -196,11 +196,12 @@ def run_full_pipeline(db: Session = None):
             papers = get_papers_last_30_days(db)
             categories = db.query(Category).all()
         except Exception as e:
-            print("DB error, falling back to mock data.")
+            print(f"DB error: {e}")
+            return {"leaderboard": [], "graph": {"nodes": [], "edges": []}}
     
-    if not papers:
-        print("Using MOCK data for testing the actual ML pipeline...")
-        papers, categories = generate_mock_data()
+    if not papers or not categories:
+        print("No data available in the database.")
+        return {"leaderboard": [], "graph": {"nodes": [], "edges": []}}
         
     # Check embedding & generate
     papers_to_embed = [p for p in papers if p.paper_vector is None]
@@ -217,7 +218,7 @@ def run_full_pipeline(db: Session = None):
         for i, c in enumerate(cats_to_embed):
             c.category_vector = cat_vectors[i].tolist()
         
-    output_1 = process_zero_shot_classification_mock(categories, papers)
+    output_1 = process_zero_shot_classification(db, papers)
     output_2 = process_topic_clustering(None, papers)
     
     return {
@@ -225,77 +226,3 @@ def run_full_pipeline(db: Session = None):
         "graph": output_2
     }
 
-def process_zero_shot_classification_mock(categories, papers):
-    if not categories:
-        return []
-    
-    cat_vectors = np.array([cat.category_vector for cat in categories])
-    cat_names = [cat.name for cat in categories]
-    
-    norms = np.linalg.norm(cat_vectors, axis=1, keepdims=True)
-    norms[norms == 0] = 1
-    cat_vectors_norm = cat_vectors / norms
-
-    results = {cat_name: 0 for cat_name in cat_names}
-
-    for paper in papers:
-        if paper.paper_vector is None:
-            continue
-        p_vec = np.array(paper.paper_vector)
-        p_vec_norm = p_vec / np.linalg.norm(p_vec)
-        similarities = np.dot(cat_vectors_norm, p_vec_norm)
-        best_match_idx = np.argmax(similarities)
-        if similarities[best_match_idx] > 0.40: # Lowered threshold for mock data
-            results[cat_names[best_match_idx]] += 1
-            
-    leaderboard = [{"topic": name, "paper_count": count, "growth_rate": round(np.random.uniform(2.0, 15.0), 2)} for name, count in results.items()]
-    leaderboard.sort(key=lambda x: x["paper_count"], reverse=True)
-    return leaderboard
-
-class MockCategory:
-    def __init__(self, name):
-        self.name = name
-        self.category_vector = None
-
-class MockPaper:
-    def __init__(self, id, title, abstract):
-        self.id = id
-        self.title = title
-        self.abstract = abstract
-        self.paper_vector = None
-        self.umap_x = None
-        self.umap_y = None
-
-def generate_mock_data():
-    categories = [
-        MockCategory("Large Language Models"),
-        MockCategory("Computer Vision"),
-        MockCategory("Reinforcement Learning"),
-        MockCategory("Agentic AI")
-    ]
-    
-    papers = [
-        MockPaper(1, "A new LLM", "We introduce a new large language model that outperforms GPT-4 on reasoning tasks using chain of thought."),
-        MockPaper(2, "Vision Transformer", "This paper presents a novel vision transformer architecture for image classification and object detection."),
-        MockPaper(3, "RL in Robotics", "We apply deep reinforcement learning to train a robotic arm to perform complex manipulation tasks."),
-        MockPaper(4, "Multi-Agent System", "An autonomous multi-agent system where LLMs collaborate to write and test software code."),
-        MockPaper(5, "LLM Hallucinations", "We study the problem of hallucinations in large language models and propose a retrieval-augmented solution."),
-        MockPaper(6, "Image Segmentation", "A new method for semantic image segmentation using diffusion models and attention mechanisms."),
-        MockPaper(7, "PPO Agent", "Improving proximal policy optimization for continuous control tasks in reinforcement learning."),
-        MockPaper(8, "Agentic Workflow", "Agentic workflows using LLMs for automated data analysis and report generation."),
-        MockPaper(9, "Prompt Engineering", "Techniques for prompt engineering to improve zero-shot reasoning in LLMs."),
-        MockPaper(10, "3D Point Clouds", "Deep learning on 3D point clouds for autonomous driving applications."),
-        MockPaper(11, "Q-Learning", "A theoretical analysis of deep Q-learning convergence in stochastic environments."),
-        MockPaper(12, "Autonomous Agents", "Building autonomous AI agents that can browse the web and complete user tasks."),
-        MockPaper(13, "Language Agents", "Language models as intelligent agents: a survey of current methods and future directions."),
-        MockPaper(14, "Object Detection", "Real-time object detection on mobile devices using lightweight neural networks."),
-        MockPaper(15, "RLHF", "Reinforcement learning from human feedback for aligning language models with human values."),
-        MockPaper(16, "Generative Agents", "Generative interactive agents that simulate human behavior in a virtual sandbox environment.")
-    ]
-    
-    return papers, categories
-
-if __name__ == "__main__":
-    result = run_full_pipeline()
-    import json
-    print(json.dumps(result, indent=2))
