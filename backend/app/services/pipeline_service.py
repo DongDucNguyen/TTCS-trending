@@ -51,7 +51,9 @@ def process_zero_shot_classification(db: Session, papers: list[Paper]):
     norms[norms == 0] = 1 # Avoid division by zero
     cat_vectors_norm = cat_vectors / norms
 
-    results = {cat_name: 0 for cat_name in cat_names}
+    current_date = datetime.utcnow().date()
+    # Theo dõi cả Số lượng bài (count) và Trọng số tin cậy (score) cho 2 giai đoạn thời gian
+    results = {cat_name: {"count": 0, "recent_score": 0.0, "old_score": 0.0} for cat_name in cat_names}
 
     for paper in papers:
         if paper.paper_vector is None:
@@ -63,20 +65,51 @@ def process_zero_shot_classification(db: Session, papers: list[Paper]):
         # Tính dot product (cosine similarity vì đã normalize)
         similarities = np.dot(cat_vectors_norm, p_vec_norm)
         
-        best_match_idx = np.argmax(similarities)
-        best_score = similarities[best_match_idx]
+        # CẤP ĐỘ 2: Softmax Adaptive Threshold
+        # Scale (temperature = 10) để khuếch đại sự khác biệt nhỏ trong Cosine Similarity
+        exp_sims = np.exp(similarities * 10) 
+        probs = exp_sims / np.sum(exp_sims)
         
-        # Ngưỡng Threshold 0.65 như thiết kế
-        if best_score > 0.65:
-            results[cat_names[best_match_idx]] += 1
+        best_match_idx = np.argmax(probs)
+        best_prob = probs[best_match_idx]
+        
+        # Ngưỡng Tương đối (Relative Threshold): > 50%
+        # Chỉ nhận danh mục nếu AI thực sự chắc chắn về nó hơn hẳn các danh mục còn lại
+        if best_prob > 0.50:
+            cat_name = cat_names[best_match_idx]
+            results[cat_name]["count"] += 1
             
-    # Tính Growth Rate và build Leaderboard
+            # Tính tuổi của bài báo (so với hiện tại)
+            if paper.published:
+                pub_date = paper.published.date() if isinstance(paper.published, datetime) else paper.published
+                days_old = (current_date - pub_date).days
+            else:
+                days_old = 0
+                
+            # Phân bổ điểm vào Khối Mới (<=15 ngày) hoặc Khối Cũ (>15 ngày)
+            if days_old <= 15:
+                results[cat_name]["recent_score"] += best_prob
+            else:
+                results[cat_name]["old_score"] += best_prob
+            
+    # Tính Growth Rate Thực tế
     leaderboard = []
-    for name, count in results.items():
+    for name, data in results.items():
+        recent = data["recent_score"]
+        old = data["old_score"]
+        
+        # Công thức so sánh tăng trưởng
+        if old > 0:
+            growth = ((recent - old) / old) * 100
+        elif recent > 0:
+            growth = 100.0 # Tăng trưởng tuyệt đối từ con số 0
+        else:
+            growth = 0.0
+            
         leaderboard.append({
             "topic": name,
-            "paper_count": count,
-            "growth_rate": round(np.random.uniform(2.0, 15.0), 2) # Giả lập growth rate để test UI
+            "paper_count": data["count"],
+            "growth_rate": round(growth, 2)
         })
         
     leaderboard.sort(key=lambda x: x["paper_count"], reverse=True)
