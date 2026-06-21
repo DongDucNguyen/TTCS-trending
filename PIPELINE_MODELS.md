@@ -71,3 +71,36 @@ Trong nhánh 2, hệ thống sử dụng thư viện `BERTopic` tích hợp mộ
   2. `"graph"`: Dữ liệu đồ thị hiển thị các chủ đề mới nổi (Emergent Topics) gồm:
      - `"nodes"`: Danh sách các điểm nút đại diện cho cụm, chứa (ID, Tên được đặt bởi Ollama, Keywords, Tọa độ X và Y, Kích thước cụm).
      - `"edges"`: Trọng số liên kết dựa trên khoảng cách địa lý Euclid 2 chiều giữa các cụm Nodes (chỉ xét các Node gần nhau `dist < 2.0`).
+
+---
+
+## 4. Mô tả luồng hoạt động của file `pipeline_service.py`
+
+Xét theo trình tự chạy thực tế, file này vận hành theo các bước chính sau:
+
+1. **Khởi tạo pipeline và nạp dữ liệu nguồn**  
+   Hàm `run_full_pipeline()` được gọi để mở session database, lấy danh sách bài báo mới trong 30 ngày gần nhất và lấy toàn bộ category đang có trong hệ thống.
+
+2. **Đảm bảo dữ liệu vector luôn sẵn sàng**  
+   Hệ thống kiểm tra từng `Paper` và `Category` xem đã có embedding hay chưa. Nếu còn thiếu, hàm `generate_embeddings()` sẽ tạo mới vector từ nội dung văn bản rồi lưu lại để tái sử dụng cho các lần chạy sau.
+
+3. **Tách ra 2 nhánh xử lý từ cùng một nguồn embedding**  
+   Sau khi có đầy đủ vector, cùng một tập embedding của papers sẽ được dùng cho hai mục tiêu khác nhau:
+   - Nhánh phân loại vào các category đã biết.
+   - Nhánh khám phá các topic mới nổi chưa được định nghĩa trước.
+
+4. **Nhánh 1 xử lý bảng xếp hạng chủ đề có sẵn**  
+   Vector của từng paper được so sánh với vector của các category bằng cosine similarity. Hệ thống chuẩn hóa điểm bằng softmax có temperature để làm nổi bật category phù hợp nhất. Nếu điểm cao nhất vượt ngưỡng, paper sẽ được gán vào category đó. Sau cùng, hệ thống đếm số lượng paper theo category và tính `growth_rate` dựa trên chênh lệch giữa nhóm bài mới và cũ.
+
+5. **Nhánh 2 xử lý khám phá topic mới nổi**  
+   Embedding của papers được đưa qua UMAP để giảm từ 384 chiều xuống 2 chiều. Tọa độ 2D này tiếp tục đi vào HDBSCAN để gom cụm. Với mỗi cụm hợp lệ, hệ thống trích xuất keyword đại diện, sau đó gọi Ollama để sinh tên ngắn gọn cho cụm.
+
+6. **Dựng dữ liệu đồ thị để frontend trực quan hóa**  
+   Từ các cụm đã đặt tên, hệ thống tạo danh sách `nodes` chứa tên topic, keyword, vị trí x-y và kích thước cụm. Tiếp theo, hệ thống tính khoảng cách giữa các cụm để tạo `edges`, giúp frontend hiển thị mối liên hệ gần xa giữa các topic.
+
+7. **Ghép kết quả và trả về một JSON thống nhất**  
+   Cuối cùng, file trả về 2 khối dữ liệu trong cùng một response:
+   - `leaderboard`: kết quả từ nhánh zero-shot classification.
+   - `graph`: kết quả từ nhánh emergent topic clustering.
+
+Nói ngắn gọn, `pipeline_service.py` đóng vai trò như bộ điều phối trung tâm: lấy dữ liệu thô từ database, chuẩn hóa thành embedding, xử lý song song theo 2 hướng phân loại và khám phá, rồi hợp nhất tất cả thành dữ liệu sẵn sàng cho giao diện người dùng.
